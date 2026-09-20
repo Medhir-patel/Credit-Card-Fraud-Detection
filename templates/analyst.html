@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Analyst Queue — FraudGuard AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header id="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🛡️</span>
+                    <div>
+                        <h1>FraudGuard AI</h1>
+                        <p class="tagline">Fraud Analyst Review Queue & Audit Log</p>
+                    </div>
+                </div>
+                <div class="header-nav">
+                    <a href="/" class="nav-link">🔍 Live Scanner</a>
+                    <a href="/analyst" class="nav-link active">⚖️ Analyst Queue</a>
+                    <a href="/docs" class="nav-link" target="_blank">📖 API Docs</a>
+                    <button class="theme-toggle-btn" onclick="toggleTheme()"><span id="theme-icon">🌙</span> <span id="theme-text">Dark</span></button>
+                </div>
+                <div class="header-badge">
+                    <span class="badge badge-success">● Audit Log Connected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Analyst Queue Section -->
+        <main style="margin-top: 24px;">
+            <div class="card" style="margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h2>⚖️ Pending Review Queue</h2>
+                    <div>
+                        <select id="filter-status" onchange="loadQueue()" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border-card); padding: 8px 12px; border-radius: 8px;">
+                            <option value="">All Statuses</option>
+                            <option value="PENDING_REVIEW" selected>Pending Review Only</option>
+                            <option value="AUTO_APPROVED">Auto-Approved</option>
+                            <option value="CHALLENGED_2FA">Challenged (2FA)</option>
+                            <option value="RESOLVED_APPROVED">Resolved (Approved)</option>
+                            <option value="RESOLVED_CONFIRMED_FRAUD">Resolved (Confirmed Fraud)</option>
+                        </select>
+                        <button onclick="loadQueue()" class="nav-link" style="margin-left: 8px; cursor: pointer;">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-card); color: var(--text-secondary);">
+                                <th style="padding: 12px;">TX ID</th>
+                                <th style="padding: 12px;">Timestamp</th>
+                                <th style="padding: 12px;">Probability</th>
+                                <th style="padding: 12px;">Risk Tier</th>
+                                <th style="padding: 12px;">Status</th>
+                                <th style="padding: 12px;">Analyst Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="queue-body">
+                            <tr>
+                                <td colspan="6" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                                    Loading audit log transactions...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            <!-- Business Rules & Heuristics Manager Card -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div>
+                        <h2>🛡️ Hybrid Business Rules & Heuristics Engine</h2>
+                        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;">
+                            Manage active business logic rules that augment machine learning prediction scores.
+                        </p>
+                    </div>
+                    <button onclick="openCreateRuleModal()" class="nav-link" style="cursor: pointer; background: var(--accent); color: #fff;">
+                        ➕ Create Custom Rule
+                    </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-card); color: var(--text-secondary);">
+                                <th style="padding: 10px;">Rule Code</th>
+                                <th style="padding: 10px;">Name</th>
+                                <th style="padding: 10px;">Condition</th>
+                                <th style="padding: 10px;">Score Impact</th>
+                                <th style="padding: 10px;">Action</th>
+                                <th style="padding: 10px;">Enabled</th>
+                                <th style="padding: 10px;">Controls</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rules-body">
+                            <tr>
+                                <td colspan="7" style="padding: 20px; text-align: center; color: var(--text-muted);">
+                                    Loading hybrid rules engine database...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Alerts Container -->
+    <div id="toast-container"></div>
+
+    <!-- Slide-Over Detail Drawer -->
+    <div id="drawer-overlay" class="slide-drawer-overlay" onclick="closeDetailDrawer()"></div>
+    <div id="slide-drawer" class="slide-drawer">
+        <div class="drawer-header">
+            <h3 id="drawer-title">🔍 Transaction Telemetry</h3>
+            <button class="drawer-close" onclick="closeDetailDrawer()">✕</button>
+        </div>
+        <div class="drawer-body" id="drawer-body">
+            <!-- Dynamic Telemetry Injected by JS -->
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        async function loadQueue() {
+            const filter = document.getElementById('filter-status').value;
+            const url = filter ? `/api/transactions?status=${filter}` : '/api/transactions';
+            const tbody = document.getElementById('queue-body');
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                const list = data.transactions || [];
+
+                if (list.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="padding: 24px; text-align: center; color: var(--text-muted);">No transactions found matching filter.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = list.map(tx => {
+                    const prob = (tx.probability * 100).toFixed(2);
+                    const isPending = tx.status === 'PENDING_REVIEW';
+                    const tierColor = tx.risk_tier === 'CRITICAL' ? '#ff4757' : (tx.risk_tier === 'HIGH' ? '#ff793f' : (tx.risk_tier === 'MODERATE' ? '#ffa502' : '#00d4aa'));
+
+                    return `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="openTxDrawer('${tx.id}')">
+                            <td style="padding: 12px; font-weight: 600; color: #fff;">${tx.id}</td>
+                            <td style="padding: 12px; color: var(--text-secondary);">${new Date(tx.timestamp).toLocaleString()}</td>
+                            <td style="padding: 12px; font-weight: 700; color: ${tierColor}">${prob}%</td>
+                            <td style="padding: 12px;"><span style="background: ${tierColor}22; color: ${tierColor}; border: 1px solid ${tierColor}44; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem;">${tx.risk_tier}</span></td>
+                            <td style="padding: 12px; color: var(--text-secondary); font-size: 0.85rem;">${tx.status}</td>
+                            <td style="padding: 12px;" onclick="event.stopPropagation()">
+                                ${isPending ? `
+                                    <button class="btn-approve" onclick="reviewTx('${tx.id}', 'APPROVED')">✓ Approve</button>
+                                    <button class="btn-reject" style="margin-left: 6px;" onclick="reviewTx('${tx.id}', 'CONFIRMED_FRAUD')">🚨 Confirm Fraud</button>
+                                ` : `<span style="color: var(--text-muted); font-size: 0.85rem;">${tx.analyst_decision || 'Archived'}</span>`}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="padding: 24px; text-align: center; color: #ff4757;">Failed to load transactions: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function openTxDrawer(txId) {
+            try {
+                const res = await fetch(`/api/transactions?status=`);
+                const data = await res.json();
+                const tx = (data.transactions || []).find(t => t.id === txId);
+                if (tx) {
+                    openDetailDrawer(tx);
+                }
+            } catch (err) {
+                console.error("Failed to fetch tx detail:", err);
+            }
+        }
+
+        async function reviewTx(txId, decision) {
+            const notes = prompt(`Enter analyst review notes for ${txId} (${decision}):`, `Verified by Analyst`);
+            if (notes === null) return;
+
+            try {
+                const res = await fetch(`/api/transactions/${txId}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision, notes })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    showToast("Review Recorded", `Transaction ${txId} resolved as ${decision}`, "success");
+                    loadQueue();
+                } else {
+                    showToast("Error", result.error, "danger");
+                }
+            } catch (err) {
+                showToast("Error", err.message, "danger");
+            }
+        }
+
+        async function loadRules() {
+            const tbody = document.getElementById('rules-body');
+            if (!tbody) return;
+
+            try {
+                const res = await fetch('/api/rules');
+                const data = await res.json();
+                const rules = data.rules || [];
+
+                if (rules.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-muted);">No rules defined in engine.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = rules.map(r => {
+                    const featureLabel = r.feature_index === -1 ? 'ML Prob' : `Feature[${r.feature_index}]`;
+                    const conditionStr = `${featureLabel} ${r.operator} ${r.threshold}`;
+                    const impactStr = `+${(r.score_impact * 100).toFixed(0)}%`;
+
+                    return `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 10px; font-weight: 700; color: var(--accent-2); font-family: monospace;">${r.code}</td>
+                            <td style="padding: 10px; font-weight: 600; color: #fff;">${r.name}</td>
+                            <td style="padding: 10px; color: var(--text-secondary); font-family: monospace;">${conditionStr}</td>
+                            <td style="padding: 10px; font-weight: 700; color: #ffa502;">${impactStr}</td>
+                            <td style="padding: 10px;"><span style="background: rgba(108,99,255,0.15); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">${r.action}</span></td>
+                            <td style="padding: 10px;">
+                                <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleRule(${r.id}, this.checked)" style="cursor: pointer; transform: scale(1.2);">
+                            </td>
+                            <td style="padding: 10px;">
+                                <button onclick="deleteRule(${r.id})" style="background: rgba(255,71,87,0.15); color: var(--danger); border: 1px solid rgba(255,71,87,0.3); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 700;">🗑️ Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--danger);">Failed to load rules: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function toggleRule(ruleId, enabled) {
+            try {
+                const res = await fetch(`/api/rules/${ruleId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                if (res.ok) {
+                    showToast("Rule Updated", `Rule ID ${ruleId} set to ${enabled ? 'ACTIVE' : 'INACTIVE'}`, "info");
+                } else {
+                    showToast("Error", "Failed to toggle rule", "danger");
+                }
+            } catch (err) {
+                showToast("Error", err.message, "danger");
+            }
+        }
+
+        async function deleteRule(ruleId) {
+            if (!confirm(`Are you sure you want to delete rule ID ${ruleId}?`)) return;
+            try {
+                const res = await fetch(`/api/rules/${ruleId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast("Rule Deleted", `Rule ID ${ruleId} permanently removed.`, "warning");
+                    loadRules();
+                } else {
+                    showToast("Error", "Failed to delete rule", "danger");
+                }
+            } catch (err) {
+                showToast("Error", err.message, "danger");
+            }
+        }
+
+        async function openCreateRuleModal() {
+            const code = prompt("Enter Rule Code (e.g. HIGH_V4_SURGE):", "CUSTOM_SURGE_RULE");
+            if (!code) return;
+
+            const name = prompt("Enter Rule Name:", "Custom Feature Surge Rule");
+            if (!name) return;
+
+            const featureIndexStr = prompt("Enter Target Feature Index (0-29, or -1 for ML Probability):", "14");
+            if (featureIndexStr === null) return;
+            const feature_index = parseInt(featureIndexStr, 10);
+
+            const operator = prompt("Enter Operator (>, >=, <, <=, ==):", ">");
+            if (!operator) return;
+
+            const thresholdStr = prompt("Enter Numeric Threshold Value:", "-4.0");
+            if (thresholdStr === null) return;
+            const threshold = parseFloat(thresholdStr);
+
+            const impactStr = prompt("Enter Risk Score Impact (0.05 to 0.50):", "0.20");
+            if (impactStr === null) return;
+            const score_impact = parseFloat(impactStr);
+
+            const action = prompt("Enter Action (BOOST_RISK, HARD_BLOCK, CHALLENGE_2FA):", "BOOST_RISK");
+            if (!action) return;
+
+            try {
+                const res = await fetch('/api/rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code, name, description: "Analyst-defined custom business rule",
+                        feature_index, operator, threshold, score_impact, action, enabled: true
+                    })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    showToast("Rule Created", `Custom Rule '${code}' active in engine.`, "success");
+                    loadRules();
+                } else {
+                    showToast("Creation Error", result.error, "danger");
+                }
+            } catch (err) {
+                showToast("Error", err.message, "danger");
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQueue();
+            loadRules();
+        });
+    </script>
+</body>
+</html>

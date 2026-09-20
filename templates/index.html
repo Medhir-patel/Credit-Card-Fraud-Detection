@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Card Fraud Detection — AI Dashboard</title>
+    <meta name="description" content="AI-powered credit card fraud detection system using machine learning.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header id="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🛡️</span>
+                    <div>
+                        <h1>FraudGuard AI</h1>
+                        <p class="tagline">Credit Card Fraud Detection System</p>
+                    </div>
+                </div>
+                <div class="header-nav">
+                    <a href="/" class="nav-link active">🔍 Live Scanner</a>
+                    <a href="/analyst" class="nav-link">⚖️ Analyst Queue</a>
+                    <a href="/docs" class="nav-link" target="_blank">📖 API Docs</a>
+                    <button class="theme-toggle-btn" onclick="toggleTheme()"><span id="theme-icon">🌙</span> <span id="theme-text">Dark</span></button>
+                </div>
+                <div class="header-badge">
+                    {% if model_loaded %}
+                    <span class="badge badge-success">● Model Active</span>
+                    {% else %}
+                    <span class="badge badge-warning">● Model Not Loaded</span>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        {% if not model_loaded %}
+        <!-- No Model Warning -->
+        <section class="alert-section" id="no-model-alert">
+            <div class="alert-card">
+                <div class="alert-icon">⚠️</div>
+                <h2>Model Not Trained Yet</h2>
+                <p>Run the training script first to enable predictions:</p>
+                <code>python train_model.py</code>
+                <p class="alert-sub">Then restart this app with <code>python app.py</code></p>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if model_loaded %}
+        <!-- Stats Grid -->
+        <section class="stats-section" id="stats-section">
+            <div class="stats-grid">
+                <div class="stat-card" id="stat-model">
+                    <div class="stat-icon">🤖</div>
+                    <div class="stat-value">{{ metadata.get('best_model', 'N/A') }}</div>
+                    <div class="stat-label">Best Model</div>
+                </div>
+                <div class="stat-card" id="stat-accuracy">
+                    <div class="stat-icon">🎯</div>
+                    {% set best = metadata.get('results', {}).get(metadata.get('best_model', ''), {}) %}
+                    <div class="stat-value">{{ "%.2f"|format((best.get('auc_roc', 0)) * 100) }}%</div>
+                    <div class="stat-label">AUC-ROC Score</div>
+                </div>
+                <div class="stat-card" id="stat-transactions">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value">{{ "{:,}".format(metadata.get('dataset_info', {}).get('total_transactions', 0)) }}</div>
+                    <div class="stat-label">Transactions Analyzed</div>
+                </div>
+                <div class="stat-card" id="stat-fraud-rate">
+                    <div class="stat-icon">🚨</div>
+                    <div class="stat-value">{{ "%.3f"|format(metadata.get('dataset_info', {}).get('fraud_ratio', 0)) }}%</div>
+                    <div class="stat-label">Fraud Rate</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <section class="main-section">
+            <!-- Mode Switcher Tabs -->
+            <div class="tabs-container">
+                <button class="tab-btn active" id="tab-single" onclick="switchTab('single')">⚡ Single Transaction</button>
+                <button class="tab-btn" id="tab-batch" onclick="switchTab('batch')">📦 Batch CSV / JSON Scan</button>
+                <button class="tab-btn" id="tab-sim" onclick="switchTab('sim')">📡 Live Simulator</button>
+            </div>
+
+            <div class="main-grid">
+                <!-- Single Prediction Panel -->
+                <div class="card predict-card tab-content active" id="predict-card">
+                    <h2>🔍 Analyze Single Transaction</h2>
+                    <p class="card-desc">Enter transaction features or load a sample to get a real-time fraud prediction.</p>
+
+                    <div class="sample-buttons">
+                        <button class="btn btn-outline" id="btn-load-legit" onclick="loadSample('legitimate')">
+                            ✅ Load Legit Sample
+                        </button>
+                        <button class="btn btn-outline btn-danger" id="btn-load-fraud" onclick="loadSample('fraud')">
+                            🚨 Load Fraud Sample
+                        </button>
+                    </div>
+
+                    <div class="features-grid" id="features-grid">
+                        <!-- Features injected by JS -->
+                    </div>
+
+                    <button class="btn btn-primary" id="btn-predict" onclick="predict()">
+                        <span class="btn-text">⚡ Analyze Transaction</span>
+                        <span class="btn-loader" style="display:none;">Analyzing...</span>
+                    </button>
+                </div>
+
+                <!-- Batch Scan Panel -->
+                <div class="card predict-card tab-content" id="batch-card" style="display: none;">
+                    <h2>📦 Bulk Transaction Evaluator</h2>
+                    <p class="card-desc">Evaluate dozens or hundreds of transactions simultaneously via JSON or CSV format.</p>
+
+                    <div class="batch-actions">
+                        <button class="btn btn-outline" onclick="loadBatchSample()">📄 Load Sample Batch (10 TXs)</button>
+                        <label class="btn btn-outline btn-file">
+                            📁 Upload CSV / JSON
+                            <input type="file" id="batch-file-input" accept=".csv,.json" onchange="handleFileUpload(event)" style="display:none;">
+                        </label>
+                    </div>
+
+                    <div class="batch-textarea-wrapper">
+                        <label for="batch-input-area" class="batch-label">JSON Payload or Raw Vectors:</label>
+                        <textarea id="batch-input-area" class="batch-textarea" placeholder='[\n  [-1.35, -0.07, 2.53, ...],\n  [0.008, 4.13, -6.24, ...]\n]'></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="btn-batch-predict" onclick="predictBatch()">
+                        <span class="btn-batch-text">🚀 Run Batch Scan</span>
+                        <span class="btn-batch-loader" style="display:none;">Scanning Batch...</span>
+                </div>
+
+                <!-- Live Stream Simulator Panel -->
+                <div class="card predict-card tab-content" id="sim-card" style="display: none;">
+                    <h2>📡 Real-Time Live Transaction Simulator</h2>
+                    <p class="card-desc">Simulates a continuous stream of live credit card transactions with real-time fraud detection & DB logging.</p>
+
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px;">
+                        <button class="btn btn-primary" id="btn-sim-start" onclick="startSim()">▶️ Start Simulation</button>
+                        <button class="btn btn-outline" id="btn-sim-pause" onclick="pauseSim()" disabled>⏸️ Pause</button>
+                        <select id="sim-speed" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border-card); padding: 10px 14px; border-radius: var(--radius-sm);">
+                            <option value="1000">Fast (1 sec)</option>
+                            <option value="2000" selected>Normal (2 sec)</option>
+                            <option value="4000">Slow (4 sec)</option>
+                        </select>
+                    </div>
+
+                    <!-- Live Counters -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-card); padding: 12px; border-radius: 10px; text-align: center;">
+                            <div style="font-size: 1.4rem; font-weight: 800; color: #fff;" id="sim-counter-total">0</div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Total Streamed</div>
+                        </div>
+                        <div style="background: rgba(0,212,170,0.05); border: 1px solid rgba(0,212,170,0.2); padding: 12px; border-radius: 10px; text-align: center;">
+                            <div style="font-size: 1.4rem; font-weight: 800; color: #00d4aa;" id="sim-counter-approved">0</div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Approved</div>
+                        </div>
+                        <div style="background: rgba(255,71,87,0.05); border: 1px solid rgba(255,71,87,0.2); padding: 12px; border-radius: 10px; text-align: center;">
+                            <div style="font-size: 1.4rem; font-weight: 800; color: #ff4757;" id="sim-counter-fraud">0</div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Fraud Flagged</div>
+                        </div>
+                        <div style="background: rgba(255,165,2,0.05); border: 1px solid rgba(255,165,2,0.2); padding: 12px; border-radius: 10px; text-align: center;">
+                            <div style="font-size: 1.4rem; font-weight: 800; color: #ffa502;" id="sim-counter-rate">0.0%</div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Fraud Ratio</div>
+                        </div>
+                    </div>
+
+                    <!-- Live Simulation Velocity Chart -->
+                    <div style="margin-bottom: 20px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">📈 Live Stream Velocity & Risk Timeline</div>
+                        <div style="height: 140px; position: relative;">
+                            <canvas id="chart-sim-timeline"></canvas>
+                        </div>
+                    </div>
+
+                    <div id="sim-feed" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px;">
+                        <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            Click <strong>▶️ Start Simulation</strong> to begin streaming live transactions.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Result Panel -->
+                <div class="card result-card" id="result-card">
+                    <h2>📋 Prediction Result</h2>
+
+                    <div class="result-placeholder" id="result-placeholder">
+                        <div class="result-placeholder-icon">🔮</div>
+                        <p>Load a sample or enter features, then click <strong>Analyze</strong> to see the prediction.</p>
+                    </div>
+
+                    <!-- Single Result Content -->
+                    <div class="result-content" id="result-content" style="display:none;">
+                        <div class="result-badge" id="result-badge"></div>
+                        <div class="result-probability">
+                            <div class="prob-bar-container">
+                                <div class="prob-bar" id="prob-bar"></div>
+                            </div>
+                            <div class="prob-labels">
+                                <span>Legitimate</span>
+                                <span id="prob-value">0%</span>
+                                <span>Fraud</span>
+                            </div>
+                        </div>
+
+                        <!-- Visual Analytics Grid -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0;">
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-card); border-radius: 12px; padding: 14px; text-align: center;">
+                                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">🎯 Risk Gauge Score</div>
+                                <div style="height: 160px; position: relative;">
+                                    <canvas id="chart-risk-gauge"></canvas>
+                                </div>
+                            </div>
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-card); border-radius: 12px; padding: 14px;">
+                                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">🧠 SHAP Feature Drivers</div>
+                                <div style="height: 160px; position: relative;">
+                                    <canvas id="chart-shap-bar"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="result-details" id="result-details"></div>
+                    </div>
+
+                    <!-- Batch Result Content -->
+                    <div class="batch-result-content" id="batch-result-content" style="display:none;">
+                        <div class="batch-summary-cards" id="batch-summary-cards"></div>
+                        <div class="batch-table-container">
+                            <table class="batch-table" id="batch-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Status</th>
+                                        <th>Risk Tier</th>
+                                        <th>Fraud Prob</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="batch-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Model Performance -->
+                    <div class="performance-section">
+                        <h3>📊 Model Performance Comparison</h3>
+                        <div class="perf-table-wrapper">
+                            <table class="perf-table" id="perf-table">
+                                <thead>
+                                    <tr>
+                                        <th>Model</th>
+                                        <th>AUC-ROC</th>
+                                        <th>PR AUC</th>
+                                        <th>F1</th>
+                                        <th>Recall</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="perf-table-body">
+                                    {% for name, r in metadata.get('results', {}).items() %}
+                                    <tr class="{{ 'best-row' if name == metadata.get('best_model', '') else '' }}">
+                                        <td>
+                                            {{ name }}
+                                            {% if name == metadata.get('best_model', '') %}
+                                            <span class="best-badge">★ Best</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ "%.4f"|format(r.get('auc_roc', 0)) }}</td>
+                                        <td>{{ "%.4f"|format(r.get('pr_auc', 0)) }}</td>
+                                        <td>{{ "%.4f"|format(r.get('f1_score', 0)) }}</td>
+                                        <td>{{ "%.4f"|format(r.get('recall_fraud', 0)) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- How It Works -->
+        <section class="info-section" id="info-section">
+            <div class="card info-card">
+                <h2>🧠 How It Works</h2>
+                <div class="steps-grid">
+                    <div class="step">
+                        <div class="step-num">1</div>
+                        <h3>Data Collection</h3>
+                        <p>284,807 real credit card transactions with 30 features (PCA-transformed for privacy).</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">2</div>
+                        <h3>SMOTE Balancing</h3>
+                        <p>Synthetic oversampling handles the extreme class imbalance (0.17% fraud rate).</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">3</div>
+                        <h3>Multi-Model Training</h3>
+                        <p>4 algorithms compete: Logistic Regression, Random Forest, XGBoost, and LightGBM.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">4</div>
+                        <h3>Real-Time Prediction</h3>
+                        <p>The best model is deployed for instant fraud probability scoring.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer id="app-footer">
+            <p>Credit Card Fraud Detection System • Built with Python, Flask & Machine Learning</p>
+            <p class="footer-sub">Dataset: <a href="https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud" target="_blank">Kaggle Credit Card Fraud Dataset</a></p>
+        </footer>
+    </div>
+
+    <!-- Toast Alerts Container -->
+    <div id="toast-container"></div>
+
+    <!-- Slide-Over Detail Drawer -->
+    <div id="drawer-overlay" class="slide-drawer-overlay" onclick="closeDetailDrawer()"></div>
+    <div id="slide-drawer" class="slide-drawer">
+        <div class="drawer-header">
+            <h3 id="drawer-title">🔍 Transaction Telemetry</h3>
+            <button class="drawer-close" onclick="closeDetailDrawer()">✕</button>
+        </div>
+        <div class="drawer-body" id="drawer-body">
+            <!-- Dynamic Telemetry Injected by JS -->
+        </div>
+    </div>
+
+    <script>
+        const FEATURE_NAMES = {{ metadata.get('feature_names', [])|tojson if model_loaded else '[]' }};
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
