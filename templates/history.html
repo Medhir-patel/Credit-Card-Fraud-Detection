@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction History — FraudGuard AI</title>
+    <meta name="description" content="Session transaction history with case management, status updates, and CSV export.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header id="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">📋</span>
+                    <div>
+                        <h1>Transaction History</h1>
+                        <p class="tagline">Session Case Management & Review Queue</p>
+                    </div>
+                </div>
+                <div class="header-nav">
+                    <a href="/" class="nav-link">🔍 Live Scanner</a>
+                    <a href="/analyst" class="nav-link">⚖️ Analyst Queue & Rules</a>
+                    <a href="/dashboard" class="nav-link">📊 Analytics Dashboard</a>
+                    <a href="/history" class="nav-link active">📜 Audit History</a>
+                    <a href="/docs" class="nav-link" target="_blank">📖 API Docs</a>
+                    <button class="theme-toggle-btn" onclick="toggleTheme()"><span id="theme-icon">🌙</span> <span id="theme-text">Dark</span></button>
+                </div>
+                <div class="header-badge">
+                    <span class="badge badge-info">{{ transactions|length }} Records</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filter & Action Bar -->
+        <section style="margin-bottom: 20px;">
+            <div class="history-toolbar">
+                <div class="filter-pills" id="filter-pills">
+                    <button class="filter-pill active" data-filter="ALL" onclick="filterHistory('ALL')">All</button>
+                    <button class="filter-pill" data-filter="FRAUD" onclick="filterHistory('FRAUD')">🚨 Fraud</button>
+                    <button class="filter-pill" data-filter="LEGIT" onclick="filterHistory('LEGIT')">✅ Legitimate</button>
+                    <button class="filter-pill" data-filter="PENDING" onclick="filterHistory('PENDING')">⏳ Pending Review</button>
+                    <button class="filter-pill" data-filter="CONFIRMED_FRAUD" onclick="filterHistory('CONFIRMED_FRAUD')">🔴 Confirmed Fraud</button>
+                    <button class="filter-pill" data-filter="FALSE_POSITIVE" onclick="filterHistory('FALSE_POSITIVE')">⚪ False Positive</button>
+                </div>
+                <div class="history-actions">
+                    <button class="btn btn-outline" id="btn-refresh" onclick="loadHistory()">🔄 Refresh</button>
+                    <button class="btn btn-outline" id="btn-export-csv" onclick="exportCSV()">⬇️ Export CSV</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- History Table -->
+        <section>
+            <div class="card" style="padding: 0; overflow: hidden;">
+                {% if transactions %}
+                <div class="history-table-wrapper" id="history-table-wrapper">
+                    <table class="history-table" id="history-table">
+                        <thead>
+                            <tr>
+                                <th>TX ID</th>
+                                <th>Time</th>
+                                <th>Cardholder</th>
+                                <th>Merchant</th>
+                                <th>Amount</th>
+                                <th>Category</th>
+                                <th>Decision</th>
+                                <th>Risk</th>
+                                <th>Prob.</th>
+                                <th>Case Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                            {% for tx in transactions|reverse %}
+                            {% set is_fraud_val = tx.get('is_fraud', tx.get('prediction', 0) == 1) %}
+                            {% set tx_id_val = tx.get('tx_id', tx.get('id', 'TX-UNKNOWN')) %}
+                            {% set amount_val = tx.get('amount', 0.0) %}
+                            {% set cardholder = tx.get('cardholder_name', 'Cardholder') %}
+                            {% set card_last4 = tx.get('card_last4', '4242') %}
+                            {% set merchant = tx.get('merchant_name', 'POS / Online') %}
+                            {% set category = tx.get('merchant_category', 'general') %}
+                            {% set risk_tier_val = tx.get('risk_tier', 'LOW') %}
+                            {% set prob_val = tx.get('probability', 0.0) %}
+                            {% set status_val = tx.get('status', 'COMPLETED') %}
+                            <tr class="history-row {{ 'row-fraud' if is_fraud_val else 'row-legit' }}"
+                                data-fraud="{{ 'true' if is_fraud_val else 'false' }}"
+                                data-status="{{ status_val }}"
+                                id="row-{{ tx_id_val }}">
+                                <td><code class="tx-code">{{ tx_id_val }}</code></td>
+                                <td><small class="text-muted">{{ tx.get('timestamp', '') }}</small></td>
+                                <td>
+                                    <div class="cardholder-cell">
+                                        <span>{{ cardholder }}</span>
+                                        <small class="card-num">•••• {{ card_last4 }}</small>
+                                    </div>
+                                </td>
+                                <td>{{ merchant }}</td>
+                                <td><strong>${{ "%.2f"|format(amount_val) }}</strong></td>
+                                <td>
+                                    <span class="category-tag">{{ category|title }}</span>
+                                </td>
+                                <td>
+                                    <span class="status-pill {{ 'fraud' if is_fraud_val else 'legit' }}">
+                                        {{ '🚨 FRAUD' if is_fraud_val else '✅ LEGIT' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="risk-badge-tier risk-{{ risk_tier_val|lower }}">
+                                        {{ risk_tier_val }}
+                                    </span>
+                                </td>
+                                <td>{{ "%.1f"|format(prob_val * 100) }}%</td>
+                                <td>
+                                    <span class="case-status case-{{ status_val|lower }}" id="status-{{ tx_id_val }}">
+                                        {{ status_val|replace('_', ' ') }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-btns">
+                                        {% if is_fraud_val %}
+                                        <button class="action-btn action-confirm"
+                                                onclick="updateStatus('{{ tx_id_val }}', 'CONFIRMED_FRAUD')"
+                                                title="Confirm as Fraud">✔ Confirm</button>
+                                        <button class="action-btn action-fp"
+                                                onclick="updateStatus('{{ tx_id_val }}', 'FALSE_POSITIVE')"
+                                                title="Mark as False Positive">✘ False Pos</button>
+                                        {% else %}
+                                        <button class="action-btn action-clear"
+                                                onclick="updateStatus('{{ tx_id_val }}', 'CLEARED')"
+                                                title="Mark as Cleared">✔ Clear</button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="history-empty">
+                    <div class="history-empty-icon">📭</div>
+                    <h3>No Transactions Yet</h3>
+                    <p>Analyze transactions on the <a href="/">main page</a> using the Transaction Form — they'll appear here for case management.</p>
+                    <a href="/" class="btn btn-primary" style="display: inline-block; margin-top: 16px; text-decoration: none;">
+                        ⚡ Start Analyzing
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <footer id="app-footer">
+            <p>FraudGuard AI — Credit Card Fraud Detection System</p>
+            <p class="footer-sub">Dataset: <a href="https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud" target="_blank">Kaggle Credit Card Fraud Dataset</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // ── Filter ──────────────────────────────────────────────────────────
+        function filterHistory(filter) {
+            document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+            document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+
+            document.querySelectorAll('.history-row').forEach(row => {
+                const isFraud  = row.dataset.fraud === 'true';
+                const status   = row.dataset.status;
+                let show = false;
+                if (filter === 'ALL')             show = true;
+                else if (filter === 'FRAUD')      show = isFraud;
+                else if (filter === 'LEGIT')      show = !isFraud;
+                else if (filter === 'PENDING')    show = status === 'PENDING';
+                else                               show = status === filter;
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        // ── Update Case Status ───────────────────────────────────────────────
+        async function updateStatus(txId, newStatus) {
+            try {
+                const res = await fetch(`/api/transactions/${txId}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const el = document.getElementById(`status-${txId}`);
+                    if (el) {
+                        el.textContent = newStatus.replace(/_/g, ' ');
+                        el.className = `case-status case-${newStatus.toLowerCase()}`;
+                    }
+                    const row = document.getElementById(`row-${txId}`);
+                    if (row) row.dataset.status = newStatus;
+                    showToast(`Case ${txId} updated to: ${newStatus.replace(/_/g, ' ')}`);
+                }
+            } catch (err) {
+                console.error('Status update failed:', err);
+            }
+        }
+
+        // ── Refresh ──────────────────────────────────────────────────────────
+        function loadHistory() {
+            window.location.reload();
+        }
+
+        // ── CSV Export ───────────────────────────────────────────────────────
+        async function exportCSV() {
+            const res  = await fetch('/api/transactions');
+            const data = await res.json();
+            if (!data.length) { alert('No transactions to export.'); return; }
+
+            const headers = ['TX ID', 'Timestamp', 'Cardholder', 'Card Last4',
+                             'Amount', 'Merchant', 'Category', 'Type', 'Location',
+                             'Hour', 'Prediction', 'Probability', 'Risk Tier', 'Decision', 'Status'];
+            const rows = data.map(t => [
+                t.tx_id, t.timestamp, `"${t.cardholder_name}"`, t.card_last4,
+                t.amount, `"${t.merchant_name}"`, t.merchant_category, t.transaction_type,
+                t.location, t.hour, t.is_fraud ? 'FRAUD' : 'LEGIT',
+                (t.probability * 100).toFixed(2) + '%', t.risk_tier, t.decision, t.status,
+            ]);
+
+            const csv     = [headers, ...rows].map(r => r.join(',')).join('\n');
+            const blob    = new Blob([csv], { type: 'text/csv' });
+            const url     = URL.createObjectURL(blob);
+            const a       = document.createElement('a');
+            a.href        = url;
+            a.download    = `fraudguard_history_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ── Toast Notification ────────────────────────────────────────────────
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.classList.add('toast-show'), 10);
+            setTimeout(() => { toast.classList.remove('toast-show'); setTimeout(() => toast.remove(), 400); }, 2500);
+        }
+    </script>
+    <div id="toast-container"></div>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

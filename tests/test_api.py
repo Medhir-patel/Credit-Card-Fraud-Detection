@@ -164,6 +164,41 @@ class TestFraudDetectionAPI(unittest.TestCase):
         self.assertIn("risk_drivers", data)
         self.assertTrue(data["id"].startswith("SIM-"))
 
+    def test_dashboard_and_history_routes(self):
+        dash_resp = self.client.get("/dashboard")
+        self.assertEqual(dash_resp.status_code, 200)
+        self.assertIn(b"Analytics Dashboard", dash_resp.data)
+
+        hist_resp = self.client.get("/history")
+        self.assertEqual(hist_resp.status_code, 200)
+        self.assertIn(b"Transaction History", hist_resp.data)
+
+    def test_interactive_simulate_route(self):
+        payload = {
+            "amount": 1250.0,
+            "merchant_category": "electronics",
+            "transaction_type": "online",
+            "hour": 3,
+            "location": "domestic"
+        }
+        res = self.client.post("/simulate", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("tx_id", data)
+        self.assertIn("alert", data)
+        self.assertIn("cardholder_sms", data["alert"])
+
+    def test_live_feed_and_analytics_apis(self):
+        feed_resp = self.client.get("/api/live-feed")
+        self.assertEqual(feed_resp.status_code, 200)
+        feed_data = feed_resp.get_json()
+        self.assertIn("tx_id", feed_data)
+
+        analytics_resp = self.client.get("/api/analytics")
+        self.assertEqual(analytics_resp.status_code, 200)
+        analytics_data = analytics_resp.get_json()
+        self.assertIn("total_transactions", analytics_data)
+
 
 if __name__ == "__main__":
     unittest.main()

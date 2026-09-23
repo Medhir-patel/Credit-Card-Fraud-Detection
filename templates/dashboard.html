@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard — FraudGuard AI</title>
+    <meta name="description" content="Real-time fraud analytics dashboard showing fraud rate trends, risk tier distribution, and hourly patterns.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header id="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">📊</span>
+                    <div>
+                        <h1>Analytics Dashboard</h1>
+                        <p class="tagline">Session Fraud Intelligence & Pattern Insights</p>
+                    </div>
+                </div>
+                <div class="header-nav">
+                    <a href="/" class="nav-link">🔍 Live Scanner</a>
+                    <a href="/analyst" class="nav-link">⚖️ Analyst Queue & Rules</a>
+                    <a href="/dashboard" class="nav-link active">📊 Analytics Dashboard</a>
+                    <a href="/history" class="nav-link">📜 Audit History</a>
+                    <a href="/docs" class="nav-link" target="_blank">📖 API Docs</a>
+                    <button class="theme-toggle-btn" onclick="toggleTheme()"><span id="theme-icon">🌙</span> <span id="theme-text">Dark</span></button>
+                </div>
+                <div class="header-badge">
+                    {% if model_loaded %}
+                    <span class="badge badge-success">● Model Active</span>
+                    {% else %}
+                    <span class="badge badge-warning">● Model Not Loaded</span>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Analytics Stats -->
+        <section class="stats-section" id="analytics-stats">
+            <div class="stats-grid" id="dash-stats-grid">
+                <div class="stat-card" id="dash-total">
+                    <div class="stat-icon">📤</div>
+                    <div class="stat-value" id="dash-total-val">—</div>
+                    <div class="stat-label">Transactions Analyzed</div>
+                </div>
+                <div class="stat-card" id="dash-fraud">
+                    <div class="stat-icon">🚨</div>
+                    <div class="stat-value" id="dash-fraud-val">—</div>
+                    <div class="stat-label">Fraud Cases Detected</div>
+                </div>
+                <div class="stat-card" id="dash-rate">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-value" id="dash-rate-val">—</div>
+                    <div class="stat-label">Session Fraud Rate</div>
+                </div>
+                <div class="stat-card" id="dash-critical">
+                    <div class="stat-icon">⛔</div>
+                    <div class="stat-value" id="dash-critical-val">—</div>
+                    <div class="stat-label">Critical Cases</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <!-- Row 1: Fraud Rate Over Time + Tier Breakdown -->
+            <div class="charts-row">
+                <div class="card chart-card">
+                    <h3>📈 Session Fraud Rate Over Time</h3>
+                    <p class="card-desc">Cumulative fraud detection rate as transactions are analyzed in this session.</p>
+                    <div class="chart-wrapper">
+                        <canvas id="fraudRateChart"></canvas>
+                    </div>
+                    <div class="chart-empty" id="chart-empty-rate">
+                        <span>📊</span>
+                        <p>Analyze some transactions on the <a href="/">Analyzer page</a> to see your fraud rate trend here.</p>
+                    </div>
+                </div>
+
+                <div class="card chart-card chart-card-sm">
+                    <h3>🍩 Risk Tier Breakdown</h3>
+                    <p class="card-desc">Distribution of transactions across risk categories.</p>
+                    <div class="chart-wrapper">
+                        <canvas id="tierChart"></canvas>
+                    </div>
+                    <div class="chart-empty" id="chart-empty-tier">
+                        <span>🍩</span>
+                        <p>No tier data yet — start analyzing transactions.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Hourly Pattern + Category Breakdown -->
+            <div class="charts-row">
+                <div class="card chart-card">
+                    <h3>🕐 Hourly Transaction Pattern</h3>
+                    <p class="card-desc">Transaction volume by hour of day — reveals peak fraud windows.</p>
+                    <div class="chart-wrapper">
+                        <canvas id="hourlyChart"></canvas>
+                    </div>
+                    <div class="chart-empty" id="chart-empty-hourly">
+                        <span>🕐</span>
+                        <p>Hourly patterns will appear after analyzing transactions.</p>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <h3>🏪 Fraud by Merchant Category</h3>
+                    <p class="card-desc">Fraud detection rate across merchant types in this session.</p>
+                    <div class="chart-wrapper">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                    <div class="chart-empty" id="chart-empty-cat">
+                        <span>🏪</span>
+                        <p>Category breakdown appears after analyzing transactions.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Model Performance from Training -->
+        {% if model_loaded %}
+        <section class="charts-section">
+            <div class="card" style="padding: 28px;">
+                <h3>🤖 Trained Model Performance</h3>
+                <p class="card-desc">Performance comparison of all models trained on the creditcard.csv dataset.</p>
+                <div class="perf-table-wrapper" style="margin-top: 16px;">
+                    <table class="perf-table">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>AUC-ROC</th>
+                                <th>PR AUC</th>
+                                <th>F1 Score</th>
+                                <th>Fraud Recall</th>
+                                <th>Precision</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, r in metadata.get('results', {}).items() %}
+                            <tr class="{{ 'best-row' if name == metadata.get('best_model', '') else '' }}">
+                                <td>
+                                    {{ name }}
+                                    {% if name == metadata.get('best_model', '') %}
+                                    <span class="best-badge">★ Active</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ "%.4f"|format(r.get('auc_roc', 0)) }}</td>
+                                <td>{{ "%.4f"|format(r.get('pr_auc', 0)) }}</td>
+                                <td>{{ "%.4f"|format(r.get('f1_score', 0)) }}</td>
+                                <td>{{ "%.4f"|format(r.get('recall_fraud', 0)) }}</td>
+                                <td>{{ "%.4f"|format(r.get('precision_fraud', 0)) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        <footer id="app-footer">
+            <p>FraudGuard AI — Credit Card Fraud Detection System</p>
+            <p class="footer-sub">Dataset: <a href="https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud" target="_blank">Kaggle Credit Card Fraud Dataset</a></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

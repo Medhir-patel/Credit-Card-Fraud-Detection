@@ -23,6 +23,10 @@ from database import (
     get_fraud_rules, add_fraud_rule, toggle_fraud_rule, delete_fraud_rule
 )
 from rule_engine import hybrid_engine
+from transaction_simulator import (
+    simulate_transaction, build_feature_vector, CATEGORY_THRESHOLDS
+)
+from alert_engine import build_alert_payload
 
 app = Flask(__name__)
 
@@ -75,6 +79,178 @@ def index():
 def analyst_queue():
     """Fraud Analyst Review Queue Dashboard."""
     return render_template("analyst.html", metadata=METADATA if METADATA else {})
+
+
+@app.route("/dashboard")
+def dashboard_view():
+    """Analytics Dashboard View."""
+    return render_template("dashboard.html",
+                           model_loaded=MODEL is not None,
+                           metadata=METADATA if METADATA else {})
+
+
+@app.route("/history")
+def history_view():
+    """Transaction Audit History View."""
+    txs = get_transactions(limit=200)
+    return render_template("history.html",
+                           transactions=txs,
+                           metadata=METADATA if METADATA else {})
+
+
+@app.route("/simulate", methods=["GET", "POST"])
+def simulate_interactive():
+    """
+    Interactive human-friendly transaction simulation route.
+    Converts human inputs into PCA feature vectors, evaluates model & rules, and builds alert payload.
+    """
+    if request.method == "POST":
+        try:
+            tx_data = request.get_json() or {}
+            features, fraud_weight, risk_factors = simulate_transaction(tx_data)
+
+            if MODEL is not None and SCALER is not None:
+                X = np.array(features, dtype=float).reshape(1, -1)
+                X_scaled = SCALER.transform(X)
+                probability = float(MODEL.predict_proba(X_scaled)[0][1])
+                opt_thresh = float(METADATA.get("optimal_threshold", 0.5)) if METADATA else 0.5
+                prediction = 1 if probability >= opt_thresh else 0
+            else:
+                probability = float(fraud_weight)
+                prediction = 1 if fraud_weight > 0.5 else 0
+
+            risk_data = assess_risk(probability, prediction)
+            active_rules = get_fraud_rules(enabled_only=True)
+            hybrid_eval = hybrid_engine.evaluate(features, probability, active_rules)
+
+            pred_payload = {
+                "prediction": prediction,
+                "probability": probability,
+                "risk": risk_data,
+                "hybrid_eval": hybrid_eval
+            }
+
+            alert_payload = build_alert_payload(tx_data, pred_payload, risk_factors)
+
+            tx_id = tx_data.get("tx_id", f"TX-SIM-{int(time.time()*1000):x}".upper())
+            log_transaction(
+                tx_id=tx_id,
+                features=features,
+                probability=probability,
+                prediction=prediction,
+                risk_tier=risk_data["tier"],
+                decision=risk_data["decision"]
+            )
+
+            return jsonify({
+                "tx_id": tx_id,
+                "features": features,
+                "probability": round(probability, 6),
+                "prediction": prediction,
+                "is_fraud": prediction == 1,
+                "risk": risk_data,
+                "hybrid_eval": hybrid_eval,
+                "alert": alert_payload
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return jsonify({"message": "Use POST to submit transaction simulation parameters."})
+
+
+@app.route("/api/analytics")
+def api_analytics():
+    """Return aggregated stats for the analytics dashboard."""
+    history = get_transactions(limit=500)
+    total = len(history)
+    fraud_count = sum(1 for t in history if t.get("prediction") == 1 or t.get("risk_tier") in ("HIGH", "CRITICAL"))
+
+    tier_counts = {"LOW": 0, "MODERATE": 0, "HIGH": 0, "CRITICAL": 0}
+    for t in history:
+        tier = t.get("risk_tier", "LOW")
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+
+    return jsonify({
+        "total_transactions": total,
+        "fraud_count": fraud_count,
+        "fraud_rate_percent": round((fraud_count / total) * 100, 2) if total else 0.0,
+        "risk_tier_breakdown": tier_counts
+    })
+
+
+_LIVE_MERCHANTS = {
+    "grocery": ["Whole Foods", "Walmart", "Target", "Costco", "Kroger", "Aldi"],
+    "electronics": ["Best Buy", "Apple Store", "Samsung", "Newegg", "B&H Photo"],
+    "dining": ["Starbucks", "McDonald's", "Chipotle", "Olive Garden", "Sushi Palace"],
+    "online": ["Amazon", "eBay", "Shopify Store", "Etsy", "Alibaba"],
+    "travel": ["Marriott Hotels", "Delta Airlines", "Airbnb", "Booking.com", "Uber"],
+    "atm": ["Chase ATM", "Wells Fargo ATM", "Bank of America ATM", "Citibank ATM"],
+    "entertainment": ["Netflix", "Spotify", "AMC Theaters", "Steam", "PlayStation Store"],
+    "healthcare": ["CVS Pharmacy", "Walgreens", "Kaiser Permanente", "LabCorp"],
+}
+
+_LIVE_NAMES = [
+    "James Wilson", "Emma Johnson", "Liam Brown", "Olivia Davis", "Noah Garcia",
+    "Ava Martinez", "Elijah Anderson", "Isabella Thomas", "Lucas Jackson", "Mia White",
+    "Rajesh Kumar", "Priya Sharma", "Arun Patel", "Sunita Singh", "Vikram Mehta"
+]
+
+@app.route("/api/live-feed")
+def api_live_feed():
+    """Live stream feed polling endpoint for analytics dashboard."""
+    import random
+    category = random.choice(list(_LIVE_MERCHANTS.keys()))
+    merchant = random.choice(_LIVE_MERCHANTS[category])
+    name = random.choice(_LIVE_NAMES)
+    tx_type = random.choice(["pos", "online", "atm", "contactless"])
+    location = random.choice(["domestic", "europe", "asia", "americas"])
+
+    base = CATEGORY_THRESHOLDS.get(category, 100.0)
+    factor = random.choices([0.2, 0.5, 0.8, 1.2, 2.0, 4.0, 6.0], weights=[20, 30, 25, 12, 7, 4, 2])[0]
+    amount = round(base * factor * random.uniform(0.8, 1.2), 2)
+    hour = random.randint(0, 23)
+
+    tx_data = {
+        "amount": amount,
+        "merchant_category": category,
+        "transaction_type": tx_type,
+        "hour": hour,
+        "location": location,
+        "merchant_name": merchant,
+        "cardholder_name": name,
+        "card_last4": f"{random.randint(1000, 9999)}"
+    }
+
+    features, fraud_weight, _ = simulate_transaction(tx_data)
+
+    if MODEL is not None and SCALER is not None:
+        X = np.array(features, dtype=float).reshape(1, -1)
+        X_scaled = SCALER.transform(X)
+        probability = float(MODEL.predict_proba(X_scaled)[0][1])
+        prediction = 1 if probability >= float(METADATA.get("optimal_threshold", 0.5)) else 0
+    else:
+        probability = float(fraud_weight)
+        prediction = 1 if fraud_weight > 0.5 else 0
+
+    risk_data = assess_risk(probability, prediction)
+    tx_id = f"TX-{random.randint(10000, 99999)}"
+
+    return jsonify({
+        "tx_id": tx_id,
+        "cardholder_name": name,
+        "card_last4": tx_data["card_last4"],
+        "merchant_name": merchant,
+        "merchant_category": category,
+        "amount": amount,
+        "transaction_type": tx_type,
+        "hour": hour,
+        "location": location,
+        "prediction": prediction,
+        "probability": round(probability, 4),
+        "is_fraud": prediction == 1,
+        "risk": risk_data,
+        "timestamp": time.strftime("%H:%M:%S")
+    })
 
 
 @app.route("/api/health")
